@@ -1,6 +1,6 @@
 Package: gwavr
 Title: Get Water Attributes Visually in R
-Version: 0.2.0
+Version: 0.3.1
 Authors@R: 
     person(given = "Joshua",
            family = "Erickson",
@@ -11,15 +11,18 @@ URL: https://github.com/joshualerickson/gwavr/
 BugReports: https://github.com/joshualerickson/gwavr/issues/
 License: MIT + file LICENSE
 Encoding: UTF-8
-RoxygenNote: 7.1.2
-Imports: dplyr, httr, jsonlite, leaflet, leaflet.extras, magrittr,
-        miniUI, nhdplusTools, purrr, scales, sf, shiny, shinyWidgets,
-        tidyr, units, utils, promises, elevatr, whitebox, terra
-Suggests: spelling, knitr, rmarkdown
+RoxygenNote: 7.3.1
+Imports: dplyr, httr, jsonlite, leaflet, leaflet.extras, nhdplusTools,
+        purrr, scales, sf, shiny, promises, miniUI, shinyWidgets,
+        tidyr, units, utils, elevatr, whitebox, terra, htmlwidgets
+Suggests: spelling, knitr, rmarkdown, testthat (>= 3.0.0)
 Language: en-US
+Config/testthat/edition: 3
+LazyData: true
 NeedsCompilation: no
-Packaged: 2022-03-28 21:16:23 UTC; joshualerickson
+Packaged: 2024-05-10 22:34:17 UTC; joshualerickson
 Author: Joshua Erickson [aut, cre]
 Maintainer: Joshua Erickson <joshualerickson@gmail.com>
+Depends: R (>= 3.5.0)
 Repository: CRAN
-Date/Publication: 2022-03-28 21:30:02 UTC
+Date/Publication: 2024-05-10 22:53:11 UTC

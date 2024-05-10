@@ -5,13 +5,18 @@
 \title{Get Watershed Basin Interactively}
 \usage{
 get_basin_interactively(
+  map = NULL,
   ns = "basin-ui",
   viewer = shiny::paneViewer(),
   title = "Delineate Basin",
+  dem = NULL,
+  threshold = 1000,
   ...
 )
 }
 \arguments{
+\item{map}{a background leaflet or mapview map to be used for editing. If NULL a blank mapview canvas will be provided.}
+
 \item{ns}{\code{string} name for the Shiny \code{namespace} to use.  The \code{ns}
 is unlikely to require a change.}
 
@@ -25,19 +30,48 @@ behaviour in Firefox.}
 \item{title}{\code{string} to customize the title of the UI window.  The default
 is "Delineate Basin".}
 
-\item{...}{other arguments to \code{leafletOutput()} in module.}
+\item{dem}{A 'SpatRaster' object dem. (optional)}
+
+\item{threshold}{A threshold for stream initiation. 1000 (default).}
+
+\item{...}{other arguments to \code{leafletOutput()} in module and/or wbt_* functions.}
 }
 \value{
-A list of sf objects that the user collected during shiny session.
+A sf object that contains watershed polygons
+the user collected during shiny session.
 }
 \description{
-This function allows the user delineate watershed basins interactively with a
-shiny app. It uses the {elevatr} package for DEM and {whitebox} package to delineate the watershed.
+This function allows the user to delineate watershed basins interactively with a
+shiny app. It uses the elevatr package to acquire the Digital Elevation Model (DEM) or user inputted DEM
+and whitebox package to delineate the basin (see details).
+}
+\details{
+\strong{This function will throw an error if you don't draw the bounding box (rectangle) first and you didn't include your own DEM.}
+Once the user has drawn the bounding box (or added own DEM) then you can use the marker as a pour point location.
+
+\strong{Steps}
+\enumerate{
+\item Input a well-suited DEM zoom level and threshold. (skip if own DEM is inputted)
+\item Draw bounding box (rectangle or polygon) (skip if own DEM is inputted).
+\item Use marker to place pour point(s).
+\item If necessary, change 'Cell Threshold' to change drainage density.
+\item Repeat steps 1-4 if needed.
+\item When finished, press 'done' and basins will be saved as a list in local environment.
+}
+
+In addition, this function uses both \code{whitebox::wbt_feature_preserving_smoothing()} and \code{whitebox::wbt_breach_depressions()}
+prior to running the flow direction and flow accumulation (both d8) algorithms.
+}
+\note{
+The marker will only work for the most current stream raster. You can have multiple areas but
+you need to make sure that you are on the most current raster when selecting basins or the app will crash. If
+you add your own DEM then you don't need to draw a bounding box.
 }
 \examples{
 
 if(interactive()){
-nhdplus_data <- get_basin_interactively()
+basin_data <- get_basin_interactively()
 }
+
 
 }

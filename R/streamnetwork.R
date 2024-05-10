@@ -1,8 +1,8 @@
-#' Get Watershed Basin Interactively
+#' Get Stream Network Interactively
 #'
-#' @description This function allows the user to delineate watershed basins interactively with a
+#' @description This function allows the user to get stream networks and watersheds interactively with a
 #' shiny app. It uses the elevatr package to acquire the Digital Elevation Model (DEM) or user inputted DEM
-#' and whitebox package to delineate the basin (see details).
+#' and whitebox package to delineate the stream network and watersheds (see details).
 #' @param map a background leaflet or mapview map to be used for editing. If NULL a blank mapview canvas will be provided.
 #' @param ns \code{string} name for the Shiny \code{namespace} to use.  The \code{ns}
 #'          is unlikely to require a change.
@@ -14,46 +14,52 @@
 #'          behaviour in Firefox.
 #' @param title \code{string} to customize the title of the UI window.  The default
 #'          is "Delineate Basin".
-#' @param dem A 'SpatRaster' object dem. (optional)
+#' @param dem A raster or terra object dem. (optional)
 #' @param threshold A threshold for stream initiation. 1000 (default).
 #' @param ... other arguments to \code{leafletOutput()} in module and/or wbt_* functions.
-#' @return A sf object that contains watershed polygons
-#'         the user collected during shiny session.
-#'
-#' @note The marker will only work for the most current stream raster. You can have multiple areas but
-#' you need to make sure that you are on the most current raster when selecting basins or the app will crash. If
-#' you add your own DEM then you don't need to draw a bounding box.
-#'
-#' @details
-#' **This function will throw an error if you don't draw the bounding box (rectangle) first and you didn't include your own DEM.**
-#' Once the user has drawn the bounding box (or added own DEM) then you can use the marker as a pour point location.
+#' @note If you add your own DEM then you don't need to draw a bounding box.
+#' @details This function uses the package \link{elevatr} to download the DEM (unless you provide your own).
+#' Once the user has drawn the bounding box or inputed DEM and selected appropriate zoom (resolution) and threshold then
+#' the app will create basins and streams.
 #'
 #' **Steps**
 #'
 #' 1. Input a well-suited DEM zoom level and threshold. (skip if own DEM is inputted)
 #' 2. Draw bounding box (rectangle or polygon) (skip if own DEM is inputted).
-#' 3. Use marker to place pour point(s).
-#' 4. If necessary, change 'Cell Threshold' to change drainage density.
-#' 5. Repeat steps 1-4 if needed.
-#' 6. When finished, press 'done' and basins will be saved as a list in local environment.
+#' 3. Wait for layers to respond.
+#' 4. Repeat steps 1-4 if needed.
+#' 5. when finished, press 'done' and stream network and watersheds will be saved as a list in local environment with the associated
+#' flow accumulation and flow direction.
+#'
 #'
 #' In addition, this function uses both `whitebox::wbt_feature_preserving_smoothing()` and `whitebox::wbt_breach_depressions()`
 #' prior to running the flow direction and flow accumulation (both d8) algorithms.
+#'
+#'
+#'
+#' @return A list of sf objects that the user collected during shiny session as well as flow accumulation and direction paths to tif.
+#' Each list will contain two sf objects: `watersheds` and `streams`. The `streams` object will also return these attributes:
+#' `tribid`, `strahler`, `slope`, `length`, `mainstem`, `FID`, `STRM_VAL`.
 #' @export
 #' @examples
 #'
 #' if(interactive()){
-#' basin_data <- get_basin_interactively()
+#' streamnetwork <- get_stream_network_interactively()
 #' }
 #'
 #'
-get_basin_interactively <- function(map = NULL,
-                                    ns = 'basin-ui',
+#'
+get_stream_network_interactively <- function(
+                                    map = NULL,
+                                    ns = 'streamnetwork-ui',
                                     viewer = shiny::paneViewer(),
-                                    title = 'Delineate Basin',
+                                    title = 'Streamnetwork',
                                     dem = NULL,
                                     threshold = 1000,
                                     ...) {
+
+  #spherical geometry switched off
+  sf::sf_use_s2(FALSE)
 
   ## Some code hijacked from mapedit throughout; to get miniUI look, etc
 
@@ -70,7 +76,7 @@ Shiny.addCustomMessageHandler(
   })
 "
   )),miniUI::miniContentPanel(
-    basinModUI(ns, height = '97%'),
+    streamnetworkModUI(ns, height = '97%'),
     height=NULL, width=NULL
   ),
   miniUI::gadgetTitleBar(
@@ -101,11 +107,12 @@ $(document).on('shiny:disconnected', function() {
 
     crud_mod <- reactive(shiny::callModule(
       map = map,
-      basinMod,
+      streamnetworkMod,
       ns,
       values = values,
       dem = dem,
-      threshold = threshold
+      threshold = threshold,
+      ...
     ))
 
     observe({crud_mod()})
@@ -122,14 +129,7 @@ $(document).on('shiny:disconnected', function() {
     observeEvent(input$done, {
 
       shiny::stopApp(
-        values$basin_data %>%
-        dplyr::select(geometry, id)  %>%
-        sf::st_make_valid() %>%
-        dplyr::mutate(area_acres = as.numeric(units::set_units(sf::st_area(.), 'acres')),
-                      area_miles = as.numeric(units::set_units(sf::st_area(.), 'mi^2')),
-                      area_hectares = as.numeric(units::set_units(sf::st_area(.), 'ha')),
-                      area_km = as.numeric(units::set_units(sf::st_area(.), 'km^2')))%>%
-          dplyr::relocate(-geometry,.before = geometry)
+        values$basin_data_list
       )
 
     })
