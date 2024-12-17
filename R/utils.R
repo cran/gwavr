@@ -12,9 +12,9 @@ get_NLDI <- function(point){
 
   comid <- nhdplusTools::discover_nhdplus_id(point)
 
-  nldiURLs <- list(basin_boundary = paste0("https://labs.waterdata.usgs.gov/api/nldi/linked-data/comid/",comid,"/basin"),
-                   UT = paste0("https://labs.waterdata.usgs.gov/api/nldi/linked-data/comid/",comid,"/navigation/UT/flowlines?distance=999"),
-                   UM = paste0("https://labs.waterdata.usgs.gov/api/nldi/linked-data/comid/",comid,"/navigation/UM/flowlines?distance=999"))
+  nldiURLs <- list(basin_boundary = paste0("https://api.water.usgs.gov/nldi/linked-data/comid/",comid,"/basin"),
+                   UT = paste0("https://api.water.usgs.gov/nldi/linked-data/comid/",comid,"/navigation/UT/flowlines?distance=999"),
+                   UM = paste0("https://api.water.usgs.gov/nldi/linked-data/comid/",comid,"/navigation/UM/flowlines?distance=999"))
 
   nldi_data <- list()
 
@@ -49,9 +49,9 @@ get_NLDI_catchments <- function(point, type = 'local', method = 'all'){
   if(is.na(comid)){stop('COMID not found')}
 
   if(method == 'all'){
-    nldiURLs <- list(UT = paste0("https://labs.waterdata.usgs.gov/api/nldi/linked-data/comid/",comid,"/navigation/UT/flowlines?distance=999"))
+    nldiURLs <- list(UT = paste0("https://api.water.usgs.gov/nldi/linked-data/comid/",comid,"/navigation/UT/flowlines?distance=999"))
   } else if (method == 'local'){
-    nldiURLs <- list(UT = paste0("https://labs.waterdata.usgs.gov/api/nldi/linked-data/comid/",comid,"/navigation/UT/flowlines?distance=0"))
+    nldiURLs <- list(UT = paste0("https://api.water.usgs.gov/nldi/linked-data/comid/",comid,"/navigation/UT/flowlines?distance=0"))
   }
 
   nldi_data <- list()
@@ -162,7 +162,7 @@ nldi_basin_function <- function(point){
   clat <- point$geometry[[1]][[2]]
   clng <- point$geometry[[1]][[1]]
   rowid <- point$rowid
-  ids <- paste0("https://labs.waterdata.usgs.gov/api/nldi/linked-data/comid/position?coords=POINT%28",
+  ids <- paste0("https://api.water.usgs.gov/nldi/linked-data/comid/position?coords=POINT%28",
                 clng,"%20", clat, "%29")
 
   error_ids <- httr::GET(url = ids,
@@ -172,7 +172,7 @@ nldi_basin_function <- function(point){
   nld <- jsonlite::fromJSON(file.path(tempdir(),"nld_tmp.json"))
 
 
-  nldiURLs <- paste0("https://labs.waterdata.usgs.gov/api/nldi/linked-data/comid/",nld$features$properties$identifier,"/basin")
+  nldiURLs <- paste0("https://api.water.usgs.gov/nldi/linked-data/comid/",nld$features$properties$identifier,"/basin")
 
   nldi_data <- sf::read_sf(nldiURLs)
 
@@ -710,4 +710,132 @@ jsonlite::toJSON(styleTrue, auto_unbox=TRUE),
 ns
     )
   )
+}
+
+#' Get National Oceanic and Atmospheric Administration (NOAA) Atlas 14
+#'
+#' @param point An sf POINT object.
+#' @param data_type A character, e.g. 'depth' or 'intensity'.
+#' @param units A character, e.g. 'english' or 'metric'.
+#' @param series A character, e.g. 'pds' or 'ams'
+#'
+#' @return A tibble with quantiles, lower and upper bounds.
+#' @export
+#'
+#' @importFrom rlang :=
+#'
+get_noaatlas <- function(point, data_type = 'depth', units = 'english', series = 'pds') {
+
+  if (!requireNamespace("readr"))
+    stop("package `readr` is required", call. = FALSE)
+  if (!requireNamespace("rlang"))
+    stop("package `rlang` is required", call. = FALSE)
+  if (!requireNamespace("stringr"))
+    stop("package `stringr` is required", call. = FALSE)
+
+  clat <- point$geometry[[1]][[2]]
+  clng <- point$geometry[[1]][[1]]
+
+  pf <- paste0("https://hdsc.nws.noaa.gov/cgi-bin/new/cgi_readH5.py?lat=",
+               clat,"&lon=", clng, "&type=pf&data=depth",data_type,"&units=",units,"&series=", series)
+
+  error_pf <- httr::GET(url = pf,
+                        httr::write_disk(path = file.path(tempdir(),
+                                                          "noaa_tmp.html"),overwrite = TRUE))
+
+  noaa_pf <- jsonlite::toJSON(readLines(file.path(tempdir(),"noaa_tmp.html")))
+
+  noaa_pf_r <- jsonlite::fromJSON(noaa_pf)[3:5]
+
+  duration_vector <- unlist(lapply(c('5-min', '10-min', '15-min',
+                                     '30-min', '60-min', '2-hr',
+                                     '3-hr', '6-hr', '12-hr',
+                                     '24-hr', '2-day', '3-day',
+                                     '4-day', '7-day', '10-day',
+                                     '20-day', '30-day', '45-day',
+                                     '60-day'), FUN = rep, ifelse(series == 'ams', 9, 10)))
+
+  recurrence_interval <- if(series == 'ams') {
+    rep(1/c(2,5,10,25,50,100,200,500,1000), 19)
+                                } else {
+                                  rep(c(1,2,5,10,25,50,100,200,500,1000), 19)
+                                }
+
+  recurrence_interval_name <- ifelse(series == 'ams', 'exceedance_probability', 'recurrence_interval')
+
+  noaa_pf_r <- dplyr::tibble(
+    duration = duration_vector,
+    !!rlang::sym(recurrence_interval_name) := recurrence_interval,
+    quantiles = readr::parse_number(stringr::str_split(stringr::str_remove_all(noaa_pf_r[1], "\\,|\\[|\\]|quantiles = |;|'"), ' ')[[1]]),
+    upper = readr::parse_number(stringr::str_split(stringr::str_remove_all(noaa_pf_r[2], "\\,|\\[|\\]|upper = |;|'"), ' ')[[1]]),
+    lower = readr::parse_number(stringr::str_split(stringr::str_remove_all(noaa_pf_r[3], "\\,|\\[|\\]|lower = |;|'"), ' ')[[1]]),
+    data_type = data_type,
+    units = units,
+    series = series
+  ) %>%
+    dplyr::mutate(duration = factor(duration, levels = c('5-min', '10-min', '15-min',
+                                                         '30-min', '60-min', '2-hr',
+                                                         '3-hr', '6-hr', '12-hr',
+                                                         '24-hr', '2-day', '3-day',
+                                                         '4-day', '7-day', '10-day',
+                                                         '20-day', '30-day', '45-day',
+                                                         '60-day')))
+
+}
+#' Get National Oceanic and Atmospheric Administration (NOAA) Atlas 14 Graphics
+#'
+#' @param point An sf POINT object.
+#' @param data_type A character, e.g. 'depth' or 'intensity'.
+#' @param units A character, e.g. 'english' or 'metric'.
+#' @param series A character, e.g. 'pds' or 'ams'
+#' @param dur A character, e.g. '10m', '4d', '24h', etc.
+#' @param print Logical, default printing of PNG in Rstudio Viewer
+#' @param destfile A character file path, default in NULL.
+#'
+#' @return A Portable Network Graphic printed to Rstudio Viewer.
+#' @note If `print = FALSE`, then the Graphic will be saved to tempfile or destination.
+get_noaatlas_png <- function(point, data_type = 'depth', units = 'english', series = 'pds', dur, print = TRUE, destfile = NULL) {
+
+
+  if (!requireNamespace("magick"))
+    stop("package `magick` is required", call. = FALSE)
+  if (!requireNamespace("stringr"))
+    stop("package `stringr` is required", call. = FALSE)
+
+  clat <- point$geometry[[1]][[2]]
+  clng <- point$geometry[[1]][[1]]
+
+
+  plot_type <- ifelse(missing(dur), 'DF', 'FDE')
+  plot_dur <- ifelse(missing(dur), '', paste0('&dur=', dur))
+
+  pf_url <- paste0('https://hdsc.nws.noaa.gov/cgi-bin/new/cgi_',plot_type,'plots.py?lat=',
+                   clat,
+                   '&lon=',
+                   clng,
+                   '&series=',
+                   series,
+                   '&data=',
+                   data_type,
+                   '&units=',
+                   units,
+                   plot_dur,
+                   '&output=file')
+
+  noaa_png <- httr::GET(url = pf_url,
+                         httr::write_disk(path = file.path(tempdir(),
+                                                           "noaa_tmp_png.json"),overwrite = TRUE))
+
+  noaa_png_call <- readLines(file.path(tempdir(),"noaa_tmp_png.json"))
+
+  if(print){
+
+  magick::image_read(paste0('https://hdsc.nws.noaa.gov',stringr::str_remove_all(noaa_png_call[3], "plotsrc=|'|;|fdesrc=")))
+
+    } else {
+
+    utils::download.file(paste0('https://hdsc.nws.noaa.gov',stringr::str_remove_all(noaa_png_call[3], "plotsrc=|'|;|fdesrc=")),
+                  method = 'curl',
+                  destfile = ifelse(is.null(destfile), tempfile(fileext = '.png'), destfile))
+}
 }
